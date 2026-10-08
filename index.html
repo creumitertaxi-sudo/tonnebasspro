@@ -132,17 +132,25 @@
             </div>
         </div>
 
-        <div class="flex items-center space-x-4 mt-3 sm:mt-0">
+        <div class="flex flex-wrap items-center space-x-3 mt-3 sm:mt-0">
+            <!-- Audio Input Device Selector -->
+            <div class="flex items-center space-x-2 bg-slate-900/90 px-3 py-1.5 rounded-lg border border-slate-800">
+                <span class="text-[10px] font-orbitron text-slate-400">INPUT:</span>
+                <select id="audio-input-select" class="bg-transparent text-xs font-rajdhani text-cyan-400 font-bold focus:outline-none cursor-pointer">
+                    <option value="">Carregando dispositivos...</option>
+                </select>
+            </div>
+
             <!-- Master Volume & Gain -->
-            <div class="hidden md:flex items-center space-x-4 bg-slate-900/80 px-4 py-2 rounded-lg border border-slate-800">
+            <div class="hidden md:flex items-center space-x-3 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
                 <div class="flex flex-col">
-                    <span class="text-[10px] text-slate-400 font-orbitron">INPUT GAIN</span>
-                    <input id="master-input-gain" type="range" min="0.1" max="3" step="0.1" value="1" class="w-20 accent-cyan-400 cursor-pointer">
+                    <span class="text-[9px] text-slate-400 font-orbitron">GAIN</span>
+                    <input id="master-input-gain" type="range" min="0.1" max="3" step="0.1" value="1" class="w-16 accent-cyan-400 cursor-pointer">
                 </div>
-                <div class="h-6 w-[1px] bg-slate-800"></div>
+                <div class="h-5 w-[1px] bg-slate-800"></div>
                 <div class="flex flex-col">
-                    <span class="text-[10px] text-slate-400 font-orbitron">MASTER OUT</span>
-                    <input id="master-output-gain" type="range" min="0" max="1.5" step="0.05" value="0.8" class="w-20 accent-cyan-400 cursor-pointer">
+                    <span class="text-[9px] text-slate-400 font-orbitron">MASTER</span>
+                    <input id="master-output-gain" type="range" min="0" max="1.5" step="0.05" value="0.8" class="w-16 accent-cyan-400 cursor-pointer">
                 </div>
             </div>
 
@@ -153,6 +161,11 @@
             </button>
         </div>
     </header>
+
+    <!-- Error Alert Banner (Hidden by Default) -->
+    <div id="audio-error-banner" class="hidden bg-red-950/90 border-b border-red-700 px-6 py-3 text-center text-xs text-red-200 font-rajdhani font-semibold">
+        <span class="font-orbitron font-bold text-red-400">AVISO DE ÁUDIO:</span> <span id="audio-error-msg">Não foi possível acessar a entrada de áudio. Verifique se o seu navegador tem permissão para usar o microfone/interface ou se outro programa não está ocupando a porta.</span>
+    </div>
 
     <!-- Main Pedalboard & Rack Workspace -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -610,6 +623,40 @@
             level: 65
         };
 
+        // Populate Audio Input Devices (Microphones & USB Interfaces)
+        async function loadAudioInputDevices() {
+            try {
+                // Request temporary permission first so device labels show up
+                const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                tempStream.getTracks().forEach(track => track.stop());
+
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputs = devices.filter(device => device.kind === 'audioinput');
+                const selectElem = document.getElementById('audio-input-select');
+               
+                selectElem.innerHTML = '';
+                if (audioInputs.length === 0) {
+                    selectElem.innerHTML = '<option value="">Nenhum dispositivo encontrado</option>';
+                    return;
+                }
+
+                audioInputs.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Entrada de Áudio ${index + 1}`;
+                    selectElem.appendChild(option);
+                });
+            } catch (err) {
+                console.warn('Não foi possível listar dispositivos automaticamente:', err);
+                const selectElem = document.getElementById('audio-input-select');
+                selectElem.innerHTML = '<option value="">Padrão do Sistema</option>';
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadAudioInputDevices();
+        });
+
         async function initAudioEngine() {
             if (audioCtx) return;
 
@@ -805,10 +852,43 @@
             }
         }
 
-        /* --- Live Monitor Toggle --- */
+        /* --- Live Monitor Toggle & Audio Stream Initialization --- */
         let isLiveMonitorActive = false;
         const btnLiveMonitor = document.getElementById('btn-live-monitor');
         const ledLiveMonitor = document.getElementById('led-live-monitor');
+        const audioErrorBanner = document.getElementById('audio-error-banner');
+        const audioErrorMsg = document.getElementById('audio-error-msg');
+
+        async function startAudioStream() {
+            try {
+                audioErrorBanner.classList.add('hidden');
+                const selectedDeviceId = document.getElementById('audio-input-select').value;
+               
+                const constraints = {
+                    audio: {
+                        deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        latency: 0
+                    }
+                };
+
+                if (micStream) {
+                    micStream.getTracks().forEach(track => track.stop());
+                }
+
+                micStream = await navigator.mediaDevices.getUserMedia(constraints);
+                micSourceNode = audioCtx.createMediaStreamSource(micStream);
+                rebuildAudioGraph();
+                return true;
+            } catch (err) {
+                console.error('Erro de acesso ao microfone:', err);
+                audioErrorMsg.innerText = `Erro ao abrir a entrada de áudio (${err.name}: ${err.message}). Certifique-se de usar HTTPS ou localhost e permitir o acesso.`;
+                audioErrorBanner.classList.remove('hidden');
+                return false;
+            }
+        }
 
         btnLiveMonitor.addEventListener('click', async () => {
             await initAudioEngine();
@@ -819,23 +899,11 @@
             isLiveMonitorActive = !isLiveMonitorActive;
 
             if (isLiveMonitorActive) {
-                try {
-                    if (!micStream) {
-                        micStream = await navigator.mediaDevices.getUserMedia({
-                            audio: {
-                                echoCancellation: false,
-                                noiseSuppression: false,
-                                autoGainControl: false,
-                                latency: 0
-                            }
-                        });
-                        micSourceNode = audioCtx.createMediaStreamSource(micStream);
-                        rebuildAudioGraph();
-                    }
+                const success = await startAudioStream();
+                if (success) {
                     ledLiveMonitor.className = 'led-indicator active-green';
                     btnLiveMonitor.classList.add('border-emerald-500', 'bg-emerald-950/40');
-                } catch (err) {
-                    alert('Erro ao acessar o microfone/interface de áudio: ' + err.message);
+                } else {
                     isLiveMonitorActive = false;
                 }
             } else {
@@ -844,6 +912,12 @@
                 if (mainAnalyserNode) {
                     mainAnalyserNode.disconnect(audioCtx.destination);
                 }
+            }
+        });
+
+        document.getElementById('audio-input-select').addEventListener('change', async () => {
+            if (isLiveMonitorActive) {
+                await startAudioStream();
             }
         });
 
@@ -1034,7 +1108,6 @@
 
         function updateVUBars(rms, barElements) {
             const numBars = barElements.length;
-            // Map rms (0 to 1) to active LED count (0 to 18)
             const activeCount = Math.floor(Math.min(1, rms * 2.2) * numBars);
 
             barElements.forEach((bar, index) => {
@@ -1067,7 +1140,6 @@
             const rms = Math.sqrt(sum / bufferLength);
 
             updateVUBars(rms, vuBarsL);
-            // Simulate slight stereo phase spread for Channel R
             updateVUBars(rms * 0.95, vuBarsR);
 
             if (rms > 0.85) {
@@ -1251,6 +1323,4 @@
         });
     </script>
 </body>
-</html>
-
- 
+</html> 
