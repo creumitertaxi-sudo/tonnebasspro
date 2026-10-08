@@ -242,7 +242,6 @@
                 </div>
 
                 <div class="grid grid-cols-5 sm:grid-cols-10 gap-3 py-2">
-                    <!-- Faders 0 to 9 -->
                     <div class="flex flex-col items-center"><span class="font-orbitron text-[10px] text-slate-400 mb-2">31Hz</span><div id="fader-track-0" class="relative w-2 h-28 bg-slate-950 rounded-full border border-slate-800 flex justify-center"><div id="fader-thumb-0" class="absolute bottom-[50px] w-5 h-3 bg-slate-600 rounded cursor-pointer shadow border border-slate-400"></div></div><span id="eq-val-0" class="font-orbitron text-[10px] text-cyan-400 mt-2 font-bold">0.0dB</span></div>
                     <div class="flex flex-col items-center"><span class="font-orbitron text-[10px] text-slate-400 mb-2">63Hz</span><div id="fader-track-1" class="relative w-2 h-28 bg-slate-950 rounded-full border border-slate-800 flex justify-center"><div id="fader-thumb-1" class="absolute bottom-[60px] w-5 h-3 bg-slate-600 rounded cursor-pointer shadow border border-slate-400"></div></div><span id="eq-val-1" class="font-orbitron text-[10px] text-cyan-400 mt-2 font-bold">+1.5dB</span></div>
                     <div class="flex flex-col items-center"><span class="font-orbitron text-[10px] text-slate-400 mb-2">125Hz</span><div id="fader-track-2" class="relative w-2 h-28 bg-slate-950 rounded-full border border-slate-800 flex justify-center"><div id="fader-thumb-2" class="absolute bottom-[68px] w-5 h-3 bg-slate-600 rounded cursor-pointer shadow border border-slate-400"></div></div><span id="eq-val-2" class="font-orbitron text-[10px] text-cyan-400 mt-2 font-bold">+3.0dB</span></div>
@@ -574,9 +573,9 @@
                 splitter.connect(analyserR, 1);
 
                 if (!isLiveActive) {
-                    masterGainNode.disconnect(audioCtx.destination);
+                    try { masterGainNode.disconnect(audioCtx.destination); } catch(e){}
                 } else {
-                    masterGainNode.connect(audioCtx.destination);
+                    try { masterGainNode.connect(audioCtx.destination); } catch(e){}
                 }
 
                 document.getElementById('audio-error-banner').classList.add('hidden');
@@ -590,7 +589,7 @@
             }
         }
 
-        // Live Monitor Toggle Button
+        // Live Monitor Toggle Button (Corrigido com try/catch)
         const btnLiveMonitor = document.getElementById('btn-live-monitor');
         const ledLiveMonitor = document.getElementById('led-live-monitor');
 
@@ -604,10 +603,18 @@
             isLiveActive = !isLiveActive;
             if (isLiveActive) {
                 ledLiveMonitor.classList.add('active-cyan');
-                if (masterGainNode && audioCtx) masterGainNode.connect(audioCtx.destination);
+                try {
+                    masterGainNode.connect(audioCtx.destination);
+                } catch (e) {
+                    // Ignora se já estiver conectado
+                }
             } else {
                 ledLiveMonitor.classList.remove('active-cyan');
-                if (masterGainNode && audioCtx) masterGainNode.disconnect(audioCtx.destination);
+                try {
+                    masterGainNode.disconnect(audioCtx.destination);
+                } catch (e) {
+                    // Ignora caso já estivesse desconectado (evita o erro)
+                }
             }
         });
 
@@ -858,6 +865,4 @@
         window.addEventListener('DOMContentLoaded', () => { loadAudioInputs(); });
     </script>
 </body>
-</html>
-
- 
+</html> 
