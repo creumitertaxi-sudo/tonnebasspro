@@ -233,12 +233,24 @@
 
             <!-- 2. GRAPHIC EQUALIZER RACK MODULE -->
             <div class="metal-panel rounded-2xl p-5 relative">
-                <div class="flex justify-between items-center mb-6 border-b border-slate-800/80 pb-3">
+                <div class="flex flex-wrap justify-between items-center mb-6 border-b border-slate-800/80 pb-3 gap-3">
                     <div class="flex items-center space-x-3">
                         <div class="w-2 h-6 bg-cyan-500 rounded-sm"></div>
                         <h3 class="font-orbitron text-sm font-bold text-white tracking-wider">EQUALIZADOR GRÁFICO DE 10 BANDAS</h3>
                     </div>
-                    <span class="font-orbitron text-xs text-cyan-400 font-bold">±12 dB GAIN RANGE</span>
+                   
+                    <!-- EQ Auto-Presets Selector -->
+                    <div class="flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
+                        <span class="font-orbitron text-[10px] text-cyan-400 font-bold">AUTO-EQ:</span>
+                        <select id="eq-preset-select" class="bg-transparent text-white text-xs font-rajdhani font-semibold focus:outline-none cursor-pointer">
+                            <option value="flat">Flat (Neutro)</option>
+                            <option value="slap" selected>Slap Groove (Scooped)</option>
+                            <option value="reggae">Reggae / Dub (Sub Bass)</option>
+                            <option value="funk">Finger Funk / Punch</option>
+                            <option value="rock">Rock Clássico (Mid Boost)</option>
+                            <option value="metal">Metal Moderno (Aggressive)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-5 sm:grid-cols-10 gap-3 py-2">
@@ -589,7 +601,7 @@
             }
         }
 
-        // Live Monitor Toggle Button (Corrigido com try/catch)
+        // Live Monitor Toggle Button
         const btnLiveMonitor = document.getElementById('btn-live-monitor');
         const ledLiveMonitor = document.getElementById('led-live-monitor');
 
@@ -613,7 +625,7 @@
                 try {
                     masterGainNode.disconnect(audioCtx.destination);
                 } catch (e) {
-                    // Ignora caso já estivesse desconectado (evita o erro)
+                    // Ignora caso já estivesse desconectado
                 }
             }
         });
@@ -760,7 +772,41 @@
             window.addEventListener('mouseup', () => { isDragging = false; });
         });
 
-        // Graphic EQ Faders Drag Control Logic
+        // Graphic EQ Faders & Auto Presets Logic
+        const eqPresets = {
+            flat:  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            slap:  [4, 6, 3, 0, -3, -2, 2, 5, 6, 4],     // Curva em V clássica para Slap
+            reggae:[7, 8, 5, 2, 0, -2, -4, -5, -6, -6],   // Ênfase em Sub-graves
+            funk:  [2, 4, 6, 4, 0, 2, 4, 3, 1, 0],       // Punch de médios-graves e clareza
+            rock:  [0, 2, 4, 5, 3, 0, 2, 4, 3, 1],       // Presença e rosnado nos médios
+            metal: [5, 7, 4, 1, -4, -2, 3, 6, 7, 5]      // Grave encorpado com agudo estridente
+        };
+
+        function setEQValues(dbArray) {
+            dbArray.forEach((db, i) => {
+                const thumb = document.getElementById(`fader-thumb-${i}`);
+                const valLabel = document.getElementById(`eq-val-${i}`);
+                if (!thumb || !valLabel) return;
+
+                // Mapeia -12dB a +12dB para os pixels do trilho (4px até 100px)
+                let normalized = (db + 12) / 24; // 0.0 a 1.0
+                let bottomPx = 4 + (normalized * 96);
+                thumb.style.bottom = `${bottomPx}px`;
+
+                valLabel.innerText = (db > 0 ? '+' : '') + db.toFixed(1) + 'dB';
+            });
+        }
+
+        document.getElementById('eq-preset-select').addEventListener('change', (e) => {
+            const presetKey = e.target.value;
+            if (eqPresets[presetKey]) {
+                setEQValues(eqPresets[presetKey]);
+            }
+        });
+
+        // Inicializa faders com o preset padrão selecionado (Slap Groove)
+        setEQValues(eqPresets.slap);
+
         for (let i = 0; i < 10; i++) {
             const thumb = document.getElementById(`fader-thumb-${i}`);
             const track = document.getElementById(`fader-track-${i}`);
@@ -865,4 +911,6 @@
         window.addEventListener('DOMContentLoaded', () => { loadAudioInputs(); });
     </script>
 </body>
-</html> 
+</html>
+
+ 
